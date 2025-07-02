@@ -1,0 +1,240 @@
+#+title: C vs. C++
+
+* C vs. C++
+This is a trivial example to compare performance of C and C++. This example
+won't apply  to all situations, but it may illustrate that even simple C++
+idioms and abstractions may come with a performance hit compared to the C
+version.
+
+In this particular case I'm comparing a function call vs. a method call, which
+in both cases calculates the product of two 3x3 matrices. I do a bunch of matrix
+multiplications, and after every third multiplication I add the middle element
+of the latest product to the variable ~total~.
+
+In the versions below I've commented out the output of ~total~ and instead
+return it, just so the compiler won't optimize it away; and to make sure the
+timing has nothing to do with writing to STDOUT.
+
+I've verified that they do print the same result, tho.
+
+Sources and this org-mode file at [[https://github.com/or/c-vs-cpp][github:or/c-vs-cpp]].
+
+** Versions
+*** C version (~poc-c.c~)
+#+begin_src c
+#include <stdio.h>
+
+// #define ALWAYS_INLINE __attribute__((always_inline))
+#define ALWAYS_INLINE
+
+static inline ALWAYS_INLINE void
+multiply(unsigned int *result, const unsigned int *a, const unsigned int *b) {
+    result[0] = a[0] * b[0] + a[1] * b[3] + a[2] * b[6];
+    result[1] = a[0] * b[1] + a[1] * b[4] + a[2] * b[7];
+    result[2] = a[0] * b[2] + a[1] * b[5] + a[2] * b[8];
+    result[3] = a[3] * b[0] + a[4] * b[3] + a[5] * b[6];
+    result[4] = a[3] * b[1] + a[4] * b[4] + a[5] * b[7];
+    result[5] = a[3] * b[2] + a[4] * b[5] + a[5] * b[8];
+    result[6] = a[6] * b[0] + a[7] * b[3] + a[8] * b[6];
+    result[7] = a[6] * b[1] + a[7] * b[4] + a[8] * b[7];
+    result[8] = a[6] * b[2] + a[7] * b[5] + a[8] * b[8];
+}
+
+int main(int argc, char **argv) {
+    unsigned int matrix1[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    unsigned int matrix2[9] = {9, 1, 8, 2, 7, 3, 6, 4, 5};
+    unsigned int temp[9];
+    unsigned long total = 0;
+    unsigned int i;
+
+    for (i = 0; i < 10000000; i++) {
+        multiply(temp, matrix1, matrix2);
+        multiply(matrix1, matrix2, temp);
+        multiply(matrix2, temp, matrix2);
+        total += matrix2[5];
+    }
+
+    // printf("%lu\n", total);
+    return total;
+}
+#+end_src
+
+*** C++ version with operator overloading (~poc-cpp.cpp~)
+#+begin_src c++
+#include <cstring>
+#include <iostream>
+
+// #define ALWAYS_INLINE __attribute__((always_inline))
+#define ALWAYS_INLINE
+
+class Matrix {
+  private:
+    unsigned int matrix[9];
+
+  public:
+    Matrix() { std::memset(matrix, 0, sizeof(unsigned int) * 9); }
+
+    Matrix(const unsigned int data[9]) {
+        std::memcpy(matrix, data, sizeof(unsigned int) * 9);
+    }
+
+    inline ALWAYS_INLINE void multiply(const Matrix &a, const Matrix &b) {
+        matrix[0] = a[0] * b[0] + a[1] * b[3] + a[2] * b[6];
+        matrix[1] = a[0] * b[1] + a[1] * b[4] + a[2] * b[7];
+        matrix[2] = a[0] * b[2] + a[1] * b[5] + a[2] * b[8];
+        matrix[3] = a[3] * b[0] + a[4] * b[3] + a[5] * b[6];
+        matrix[4] = a[3] * b[1] + a[4] * b[4] + a[5] * b[7];
+        matrix[5] = a[3] * b[2] + a[4] * b[5] + a[5] * b[8];
+        matrix[6] = a[6] * b[0] + a[7] * b[3] + a[8] * b[6];
+        matrix[7] = a[6] * b[1] + a[7] * b[4] + a[8] * b[7];
+        matrix[8] = a[6] * b[2] + a[7] * b[5] + a[8] * b[8];
+    }
+
+    inline ALWAYS_INLINE const unsigned int &
+    operator[](std::size_t index) const {
+        return matrix[index];
+    }
+};
+
+int main(int argc, char **argv) {
+    Matrix matrix1((unsigned int[9]){1, 2, 3, 4, 5, 6, 7, 8, 9});
+    Matrix matrix2((unsigned int[9]){9, 1, 8, 2, 7, 3, 6, 4, 5});
+    Matrix temp;
+    unsigned long total = 0;
+
+    for (unsigned int i = 0; i < 10000000; i++) {
+        temp.multiply(matrix1, matrix2);
+        matrix1.multiply(matrix2, temp);
+        matrix2.multiply(temp, matrix2);
+        total += matrix2[5];
+    }
+
+    // std::cout << total << std::endl;
+    return total;
+}
+#+end_src
+
+*** C++ version with public access to the data (~poc-cpp-2.cpp~)
+#+begin_src c++
+#include <cstring>
+#include <iostream>
+
+// #define ALWAYS_INLINE __attribute__((always_inline))
+#define ALWAYS_INLINE
+
+class Matrix {
+  public:
+    unsigned int matrix[9];
+
+    Matrix() { std::memset(matrix, 0, sizeof(unsigned int) * 9); }
+
+    Matrix(const unsigned int data[9]) {
+        std::memcpy(matrix, data, sizeof(unsigned int) * 9);
+    }
+
+    inline ALWAYS_INLINE void multiply(const Matrix &a, const Matrix &b) {
+        matrix[0] = a.matrix[0] * b.matrix[0] + a.matrix[1] * b.matrix[3] +
+                    a.matrix[2] * b.matrix[6];
+        matrix[1] = a.matrix[0] * b.matrix[1] + a.matrix[1] * b.matrix[4] +
+                    a.matrix[2] * b.matrix[7];
+        matrix[2] = a.matrix[0] * b.matrix[2] + a.matrix[1] * b.matrix[5] +
+                    a.matrix[2] * b.matrix[8];
+        matrix[3] = a.matrix[3] * b.matrix[0] + a.matrix[4] * b.matrix[3] +
+                    a.matrix[5] * b.matrix[6];
+        matrix[4] = a.matrix[3] * b.matrix[1] + a.matrix[4] * b.matrix[4] +
+                    a.matrix[5] * b.matrix[7];
+        matrix[5] = a.matrix[3] * b.matrix[2] + a.matrix[4] * b.matrix[5] +
+                    a.matrix[5] * b.matrix[8];
+        matrix[6] = a.matrix[6] * b.matrix[0] + a.matrix[7] * b.matrix[3] +
+                    a.matrix[8] * b.matrix[6];
+        matrix[7] = a.matrix[6] * b.matrix[1] + a.matrix[7] * b.matrix[4] +
+                    a.matrix[8] * b.matrix[7];
+        matrix[8] = a.matrix[6] * b.matrix[2] + a.matrix[7] * b.matrix[5] +
+                    a.matrix[8] * b.matrix[8];
+    }
+};
+
+int main(int argc, char **argv) {
+    Matrix matrix1((unsigned int[9]){1, 2, 3, 4, 5, 6, 7, 8, 9});
+    Matrix matrix2((unsigned int[9]){9, 1, 8, 2, 7, 3, 6, 4, 5});
+    Matrix temp;
+    unsigned long total = 0;
+
+    for (unsigned int i = 0; i < 10000000; i++) {
+        temp.multiply(matrix1, matrix2);
+        matrix1.multiply(matrix2, temp);
+        matrix2.multiply(temp, matrix2);
+        total += matrix2.matrix[5];
+    }
+
+    // std::cout << total << std::endl;
+    return total;
+}
+#+end_src
+
+I also tried to pass the ~matrix1.matrix~ directly to get even closer to the C
+version. The performance was slightly better, but still behind the C version.
+** Building
+I've tested with ~clang~ and ~cc~, here with ~-O3 -march=native~, but I changed
+those for different runs, see results.
+#+begin_src makefile
+COMPILER = clang
+COMPILER_PLUS = clang++
+# COMPILER = gcc-15
+# COMPILER_PLUS = g++-15
+
+all: poc-c poc-cpp poc-cpp-2
+
+poc-c: poc-c.c Makefile
+	$(COMPILER) -o poc-c poc-c.c -O3 -march=native
+
+poc-cpp: poc-cpp.cpp Makefile
+	$(COMPILER_PLUS) -o poc-cpp poc-cpp.cpp -O3 -march=native
+
+poc-cpp-2: poc-cpp-2.cpp Makefile
+	$(COMPILER_PLUS) -o poc-cpp-2 poc-cpp-2.cpp -O3 -march=native
+#+end_src
+** Results
+*** Methodology
+All performed on a 15" MacBook Air (2023), Apple M2, 16 GB.
+
+I compiled with ~clang/clang++~, but the results are similar for ~gcc/g++~.
+
+I've used [[https://github.com/sharkdp/hyperfine][hyperfine]] with 5 warm-up runs and 10 samples, ran each three times,
+took the best run. Those three usually were within 2ms, however, very stable.
+
+#+begin_src bash
+hyperfine --warmup=5 -m 10 -i ./poc-c
+hyperfine --warmup=5 -m 10 -i ./poc-cpp
+hyperfine --warmup=5 -m 10 -i ./poc-cpp-2
+#+end_src
+
+*** No optimization
+The difference is big between the C version and the C++ version with operator
+overloading. But the C++ version with public access to the data is slightly
+faster.
+| version   | mean runtime in ms | std. dev. in ms | factor of C version |
+|-----------+--------------------+-----------------+---------------------|
+| poc-c     |              396.3 |             1.9 |               1.000 |
+| poc-cpp   |              891.2 |             2.4 |               2.249 |
+| poc-cpp-2 |              377.1 |             1.6 |               0.952 |
+#+TBLFM: $4=round($2/@2$2, 3)
+
+*** With ~-O3 -march=native~
+Both C++ versions are 10% slower than the C version.
+| version   | mean runtime in ms | std. dev. in ms | factor of C version |
+|-----------+--------------------+-----------------+---------------------|
+| poc-c     |              145.1 |             1.5 |               1.000 |
+| poc-cpp   |              159.7 |             0.6 |               1.101 |
+| poc-cpp-2 |              160.1 |             1.5 |               1.103 |
+#+TBLFM: $4=round($2/@2$2, 3)
+
+*** With ~-O3 -march=native~ and ~__attribute__((always_inline))~ on all inline functions
+Each version is slightly faster than the ones without this hint, but the C++
+versions are still 9% slower than the C version.
+| version   | mean runtime in ms | std. dev. in ms | factor of C version |
+|-----------+--------------------+-----------------+---------------------|
+| poc-c     |              142.6 |             1.5 |               1.000 |
+| poc-cpp   |              155.7 |             1.7 |               1.092 |
+| poc-cpp-2 |              155.7 |             1.8 |               1.092 |
+#+TBLFM: $4=round($2/@2$2, 3)
