@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 // #define ALWAYS_INLINE __attribute__((always_inline))
 #define ALWAYS_INLINE
@@ -17,11 +18,16 @@ multiply(unsigned int *result, const unsigned int *a, const unsigned int *b) {
 }
 
 int main(int argc, char **argv) {
-    unsigned int matrix1[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-    unsigned int matrix2[9] = {9, 1, 8, 2, 7, 3, 6, 4, 5};
+    unsigned int init1[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    unsigned int init2[9] = {9, 1, 8, 2, 7, 3, 6, 4, 5};
+    unsigned int matrix1[9];
+    unsigned int matrix2[9];
     unsigned int temp[9];
     unsigned long total = 0;
     unsigned int i;
+
+    memcpy(matrix1, init1, sizeof(matrix1));
+    memcpy(matrix2, init2, sizeof(matrix2));
 
     for (i = 0; i < 10000000; i++) {
         multiply(temp, matrix1, matrix2);
